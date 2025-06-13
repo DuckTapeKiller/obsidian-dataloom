@@ -1,5 +1,4 @@
 import { TextFileView, WorkspaceLeaf } from "obsidian";
-
 import { createRoot, Root } from "react-dom/client";
 import { store } from "src/redux/store";
 import { LoomState } from "src/shared/loom-state/types/loom-state";
@@ -19,6 +18,7 @@ export default class DataLoomView extends TextFileView {
 	private appId: string;
 	private pluginId: string;
 	private pluginVersion: string;
+	private focusListener: (event: FocusEvent) => void; // Added property for the event listener
 
 	data: string;
 
@@ -29,22 +29,38 @@ export default class DataLoomView extends TextFileView {
 		this.root = null;
 		this.data = "";
 		this.appId = createAppId();
+		this.focusListener = null; // Initialize the listener
 	}
 
 	async onOpen() {
-		//Add offset to the container to account for the mobile action bar
+		// Add offset to the container to account for the mobile action bar
 		this.containerEl.style.paddingBottom = "48px";
 
-		//Add settings button to action bar
+		// Add settings button to action bar
 		this.addAction("settings", "Settings", () => {
-			//Open settings tab
+			// Open settings tab
 			(this.app as any).setting.open();
-			//Navigate to plugin settings
+			// Navigate to plugin settings
 			(this.app as any).setting.openTabById(this.pluginId);
 		});
+
+		// Add event listener to scroll focused elements into view
+		this.focusListener = (event: FocusEvent) => {
+			const target = event.target as HTMLElement;
+			if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+				setTimeout(() => {
+					target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+				}, 300); // Delay to allow keyboard to appear
+			}
+		};
+		this.containerEl.addEventListener('focusin', this.focusListener, true);
 	}
 
 	async onClose() {
+		// Remove the event listener to prevent memory leaks
+		if (this.focusListener) {
+			this.containerEl.removeEventListener('focusin', this.focusListener, true);
+		}
 		if (this.root) {
 			this.root.unmount();
 			this.root = null;
@@ -54,7 +70,7 @@ export default class DataLoomView extends TextFileView {
 	setViewData(data: string, clear: boolean): void {
 		this.data = data;
 
-		//This is only called when the view is initially opened
+		// This is only called when the view is initially opened
 		if (clear) {
 			if (this.root) {
 				this.root.unmount();
@@ -108,14 +124,14 @@ export default class DataLoomView extends TextFileView {
 
 		LastSavedManager.getInstance().setLastSavedFile(this.file.path);
 
-		//We need this for when we open a new tab of the same file
-		//so that the data is up to date
+		// We need this for when we open a new tab of the same file
+		// so that the data is up to date
 		this.setViewData(serialized, false);
 
-		//Request a save - every 2s
+		// Request a save - every 2s
 		this.requestSave();
 
-		//Trigger an event to refresh the other open views of this file
+		// Trigger an event to refresh the other open views of this file
 		EventManager.getInstance().emit(
 			"app-refresh-by-state",
 			this.file.path,
